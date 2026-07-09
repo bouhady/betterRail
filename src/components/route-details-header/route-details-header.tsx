@@ -1,6 +1,8 @@
 import { useRef, useEffect } from "react"
-import { Image, ImageBackground, View, Animated as RNAnimated, Pressable } from "react-native"
+import { Image, ImageBackground, View, Animated as RNAnimated, Pressable, Platform, useColorScheme } from "react-native"
 import type { ViewStyle } from "react-native"
+import { useActionSheet } from "@expo/react-native-action-sheet"
+import { getActionSheetStyleOptions } from "@/utils/helpers/action-sheet-helpers"
 import { StyleSheet } from "react-native-unistyles"
 import { useRouter } from "expo-router"
 import { trackEvent } from "@/services/analytics"
@@ -54,7 +56,29 @@ export function RouteDetailsHeader(props: RouteDetailsHeaderProps) {
   } = useRoutePlanStore(useShallow((s) => ({ origin: s.origin, destination: s.destination, switchDirection: s.switchDirection })))
   const router = useRouter()
   const insets = useSafeAreaInsets()
+  const { showActionSheetWithOptions } = useActionSheet()
+  const colorScheme = useColorScheme()
   const routeEditDisabled = screenName !== "routeList"
+
+  // `react-native-context-menu-view` only delivers taps on iOS, so on Android we present the
+  // same actions through a cross-platform action sheet (matching the route list screen).
+  const openActionSheet = (menuActions: { title: string; onPress?: () => void }[]) => {
+    HapticFeedback.trigger("impactMedium")
+    const options = [...menuActions.map((action) => action.title), translate("common.cancel")]
+    const cancelButtonIndex = options.length - 1
+    showActionSheetWithOptions(
+      {
+        options,
+        cancelButtonIndex,
+        title: translate("routes.routeActions"),
+        ...getActionSheetStyleOptions(colorScheme),
+      },
+      (selectedIndex) => {
+        if (selectedIndex === undefined || selectedIndex === cancelButtonIndex) return
+        menuActions[selectedIndex]?.onPress?.()
+      },
+    )
+  }
 
   const stationCardScale = useRef(new RNAnimated.Value(1)).current
 
@@ -149,6 +173,28 @@ export function RouteDetailsHeader(props: RouteDetailsHeaderProps) {
         },
       ]
 
+      if (Platform.OS === "android") {
+        return (
+          <Pressable
+            onPress={() => openActionSheet(actions)}
+            hitSlop={{ top: spacing[2], bottom: spacing[2], left: spacing[2], right: spacing[2] }}
+            accessibilityRole="button"
+            accessibilityLabel={translate("routes.routeActions")}
+          >
+            <Image
+              source={ellipsisIcon}
+              style={{
+                width: 23,
+                height: 23,
+                resizeMode: "contain",
+                tintColor: "lightgrey",
+                opacity: 0.9,
+              }}
+            />
+          </Pressable>
+        )
+      }
+
       if (isLiquidGlassSupported) {
         return (
           <ContextMenu
@@ -215,6 +261,32 @@ export function RouteDetailsHeader(props: RouteDetailsHeaderProps) {
         onPress: openStationHoursSheet,
       },
     ]
+
+    if (Platform.OS === "android") {
+      return (
+        <>
+          <StarIcon style={{ marginEnd: -spacing[3] }} filled={isFavorite} onPress={handleFavoritePress} />
+          <Pressable
+            onPress={() => openActionSheet(menuActions)}
+            hitSlop={{ top: spacing[2], bottom: spacing[2], left: spacing[2], right: spacing[2] }}
+            accessibilityRole="button"
+            accessibilityLabel={translate("routes.routeActions")}
+          >
+            <Image
+              source={ellipsisIcon}
+              style={{
+                width: 23,
+                height: 23,
+                marginLeft: spacing[2],
+                resizeMode: "contain",
+                tintColor: "lightgrey",
+                opacity: 0.9,
+              }}
+            />
+          </Pressable>
+        </>
+      )
+    }
 
     if (isLiquidGlassSupported) {
       return (
